@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-Домашний бот для квартиры (Telegram) — расширенная версия для совместного быта.
+Домашний бот для квартиры (Telegram) — совместный быт и расходы.
 
 Задания:   /today /todo /add /list /del /edit /preset /undo /vacation
-Питомцы:   /walk /walks /feed /feeds
 Покупки:   /buy /shopping /bought
 Расходы:   /join /spent /balance /expenses /unspend /settle /history /currency
 Рейтинг:   /top  (итоги недели приходят по воскресеньям)
-Интерфейс: /pin /unpin /menu /help
+Интерфейс: /menu /pin /unpin /help
 
 Запуск:
   pip install python-telegram-bot
   export BOT_TOKEN="токен от @BotFather"
   export BOT_TZ="Europe/Belgrade"  # или Europe/Moscow
-  python chores_bot.py
+  python chor.py
 """
 import asyncio
 import calendar
@@ -34,7 +33,6 @@ from telegram import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
     Update,
 )
 from telegram.error import BadRequest
@@ -87,37 +85,50 @@ CURRENCY_ALIASES = {
 
 PRAISE = [
     "Красавчик!", "Так держать! 💪", "Чистота — залог здоровья ✨", "Респект!",
-    "Питомцы гордятся тобой 🐕🐱", "Ещё одно дело в копилку!", "Вот это порядок!",
-    "Герой дня! 🏆", "Домашний уют +100! 🏡",
+    "Ещё одно дело в копилку!", "Вот это порядок!", "Герой дня! 🏆", "Домашний уют +100! 🏡",
 ]
 
+# Нижняя клавиатура для быстрого доступа
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         [KeyboardButton("📅 Сегодня"), KeyboardButton("🛒 Покупки")],
-        [KeyboardButton("🐕 Прогулка"), KeyboardButton("🥣 Покормили")],
         [KeyboardButton("💸 Баланс"), KeyboardButton("➕ Быстрое дело")],
+        [KeyboardButton("📋 Все задания"), KeyboardButton("🏆 Рейтинг")],
     ],
     resize_keyboard=True,
 )
+
+# Инлайн-панель (работает в любых группах без отключения Privacy Mode)
+INLINE_MENU = InlineKeyboardMarkup([
+    [
+        InlineKeyboardButton("📅 Дела на сегодня", callback_data="menu:today"),
+        InlineKeyboardButton("🛒 Список покупок", callback_data="menu:shop"),
+    ],
+    [
+        InlineKeyboardButton("💸 Баланс и долги", callback_data="menu:balance"),
+        InlineKeyboardButton("📋 Все задания", callback_data="menu:list"),
+    ],
+    [
+        InlineKeyboardButton("🏆 Рейтинг недели", callback_data="menu:top"),
+        InlineKeyboardButton("✏️ Редактор заданий", callback_data="ed:list"),
+    ],
+])
 
 HELP = (
     "🏡 *ДОМАШНИЙ ПОМОЩНИК*\n\n"
     "📋 *ЗАДАНИЯ:*\n"
     "• `/today` — дела на сегодня (интерактивный чек-лист)\n"
-    "• `/todo [дело]` — быстрое разовое дело на сегодня (напр: `/todo Вынести мусор`)\n"
+    "• `/todo [дело]` — быстрое разовое дело на сегодня (напр: `/todo Забрать посылку`)\n"
     "• `/add Название | кто | срок | сложность` — добавить регулярное задание\n"
     "• `/list` — все регулярные задания\n"
     "• `/del N` — удалить задание\n"
-    "• `/edit` — интерактивная панель настройки заданий\n"
+    "• `/edit` — панель настройки и редактирования заданий\n"
     "• `/undo` — отменить последнее случайное выполнение задания\n"
-    "• `/vacation [имя]` — включить/выключить режим «в отпуске» (пропуск очереди)\n"
-    "• `/preset` — добавить готовые задания (лоток кота, таблетки собак, корм)\n"
+    "• `/vacation [имя]` — режим «в отпуске» (пропуск своей очереди)\n"
+    "• `/preset` — добавить готовые базовые задания (уборка, бельё)\n"
     "• 📌 `/pin` — закрепить чек-лист · `/unpin` — открепить\n\n"
-    "🐕🐱 *ПИТОМЦЫ:*\n"
-    "• `/walk` — отметить прогулку собак · `/walks` — последние прогулки\n"
-    "• `/feed` — отметить кормление (собака / кот, утро / вечер) · `/feeds` — статус\n\n"
     "🛒 *ПОКУПКИ:*\n"
-    "• `/buy молоко, хлеб` — добавить в список\n"
+    "• `/buy молоко, хлеб` — добавить в список покупок\n"
     "• `/shopping` — интерактивный список с кнопками для вычеркивания\n"
     "• `/bought [N]` — убрать пункт по номеру или очистить всё\n\n"
     "💸 *РАСХОДЫ И БАЛАНС:*\n"
@@ -129,19 +140,18 @@ HELP = (
     "• `/settle да` — закрыть расчеты и заархивировать период\n"
     "• `/history` — архив прошлых расчетов\n"
     "• `/currency rsd|eur|rub` — валюта по умолчанию\n\n"
-    "🏆 *РЕЙТИНГ И ИТОГИ:*\n"
+    "🏆 *РЕЙТИНГ И ИНТЕРФЕЙС:*\n"
     "• `/top` — рейтинг по баллам за сложность дел\n"
-    "• `/menu` — показать/скрыть нижнюю клавиатуру с кнопками"
+    "• `/menu` — интерактивная кнопочная панель управления"
 )
 
 COMMANDS = [
     ("today", "Дела на сегодня"),
     ("todo", "Быстрое дело на сегодня"),
     ("shopping", "Список покупок"),
-    ("walk", "Отметить прогулку собак"),
-    ("feed", "Отметить кормление питомцев"),
     ("balance", "Кто кому должен (расходы)"),
     ("spent", "Записать совместный расход"),
+    ("menu", "Кнопочная панель управления"),
     ("undo", "Отменить последнее выполнение"),
     ("vacation", "Режим отпуска (пропуск очереди)"),
     ("edit", "Редактировать задания"),
@@ -150,7 +160,6 @@ COMMANDS = [
     ("del", "Удалить задание"),
     ("pin", "Закрепить чек-лист"),
     ("top", "Рейтинг и итоги недели"),
-    ("menu", "Быстрое меню кнопок"),
     ("help", "Справка по всем командам"),
 ]
 
@@ -197,8 +206,6 @@ def load_state() -> dict:
     for key, default in (
         ("members", {}),
         ("log", []),
-        ("walks", []),
-        ("feeds", []),
         ("shopping", []),
         ("expenses", []),
         ("settlements_history", []),
@@ -524,32 +531,6 @@ def fmt_money(x: float) -> str:
     return str(round(x)) if abs(x - round(x)) < 0.005 else f"{x:.2f}"
 
 
-# ---------- питомцы: статус на сегодня ----------
-def get_pets_status(state: dict) -> str:
-    today_str = today_local().isoformat()
-
-    # Прогулки сегодня
-    today_walks = [w for w in state.get("walks", []) if w["at"][:10] == today_str]
-    walk_info = f"{len(today_walks)} раз(а)" if today_walks else "ещё не гуляли"
-    if today_walks:
-        last_w = today_walks[-1]
-        at_time = datetime.fromisoformat(last_w["at"]).strftime("%H:%M")
-        walk_info += f" (посл: {at_time} — {last_w['who']})"
-
-    # Кормление сегодня
-    feeds_today = [f for f in state.get("feeds", []) if f.get("date") == today_str]
-    dog_morning = next((f for f in feeds_today if "собак" in f["pet"].lower() and "утро" in f["slot"].lower()), None)
-    dog_evening = next((f for f in feeds_today if "собак" in f["pet"].lower() and "вечер" in f["slot"].lower()), None)
-    cat_morning = next((f for f in feeds_today if "кот" in f["pet"].lower() and "утро" in f["slot"].lower()), None)
-    cat_evening = next((f for f in feeds_today if "кот" in f["pet"].lower() and "вечер" in f["slot"].lower()), None)
-
-    feed_parts = []
-    feed_parts.append(f"🐶 Собака: {'✅' if dog_morning else '⬜'}/утро, {'✅' if dog_evening else '⬜'}/вечер")
-    feed_parts.append(f"🐱 Кот: {'✅' if cat_morning else '⬜'}/утро, {'✅' if cat_evening else '⬜'}/вечер")
-
-    return f"🐕 Прогулки: {walk_info}\n🥣 Кормление: {', '.join(feed_parts)}"
-
-
 # ---------- сводка на сегодня ----------
 def build_today(state: dict):
     """Возвращает (текст, кнопки, сколько пунктов)."""
@@ -579,10 +560,7 @@ def build_today(state: dict):
     # Статус отпусков
     if state.get("vacations"):
         lines.append(f"🏖 В отпуске: {', '.join(state['vacations'])}")
-
-    # Статус питомцев
-    lines.append(get_pets_status(state))
-    lines.append("")
+        lines.append("")
 
     buttons = []
     if not pending and not done and not upcoming:
@@ -633,7 +611,12 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📱 Главное меню кнопок обновлено:", reply_markup=MAIN_KEYBOARD)
+    """Показывает интерактивную панель меню (Inline-кнопки работают в любых чатах)."""
+    await update.message.reply_text(
+        "📱 *Панель управления бытом:*\nВыберите нужное действие:",
+        reply_markup=INLINE_MENU,
+        parse_mode="Markdown",
+    )
 
 
 def build_task(parts: list) -> dict:
@@ -784,11 +767,10 @@ async def today_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def preset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = load_state()
     ready = [
-        ("🐕 Таблетки от блох и клещей", ["Мы с женой"], "1 числа за день", 1),
-        ("🥫 Проверить корм собак и кошек", ["Мы с женой"], "каждые 14 дней", 1),
-        ("🐱 Почистить кошачий лоток", ["Мы с женой"], "каждые 2 дня", 1),
-        ("💉 Прививки питомцев", ["Мы с женой"], "раз в год 15.03 за 7 дней", 2),
-        ("🩺 Осмотр у ветеринара", ["Мы с женой"], "раз в год 10.09 за 7 дней", 2),
+        ("🛏 Сменить постельное бельё", ["Мы с женой"], "каждые 14 дней", 2),
+        ("🧹 Генеральная уборка", ["Мы с женой"], "раз в месяц 1 числа", 3),
+        ("🪟 Помыть окна", ["Мы с женой"], "раз в 3 месяца 1 числа", 3),
+        ("❄️ Помыть холодильник", ["Мы с женой"], "раз в 2 месяца 1 числа", 2),
     ]
     have = {t["title"] for t in state["tasks"].values()}
     added = []
@@ -806,7 +788,7 @@ async def preset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state["chat_id"] = update.effective_chat.id
     save_state(state)
     await update_pinned(context.bot, state)
-    text = ("Добавлены готовые задания для питомцев:\n• " + "\n• ".join(added)) if added else "Все готовые задания уже добавлены."
+    text = ("Добавлены готовые бытовые задания:\n• " + "\n• ".join(added)) if added else "Все готовые задания уже добавлены."
     await update.message.reply_text(text)
 
 
@@ -859,98 +841,6 @@ async def on_skip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("Передать некому")
     await refresh_today(query, state)
     await update_pinned(context.bot, state, skip_id=query.message.message_id)
-
-
-# ---------- собаки и кошки ----------
-async def walk(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    state = load_state()
-    now = datetime.now(TZ)
-    who = user_name(update.effective_user)
-    state["walks"].append({"who": who, "at": now.isoformat(timespec="minutes")})
-    del state["walks"][:-200]
-    save_state(state)
-    await update_pinned(context.bot, state)
-    await update.message.reply_text(f"🐕 {who} выгулял(а) собак в {now:%H:%M} ✅")
-
-
-async def walks(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    state = load_state()
-    if not state["walks"]:
-        await update.message.reply_text("Прогулок пока не отмечено. Отметьте через /walk")
-        return
-    lines = ["🐕 *Последние прогулки собак:*"]
-    for w in state["walks"][-6:][::-1]:
-        at = datetime.fromisoformat(w["at"])
-        lines.append(f"• {at:%d.%m %H:%M} — {w['who']}")
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
-
-
-def build_feed_keyboard():
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🐶 Собака: 🥣 Завтрак", callback_data="fd:собака:утро"),
-            InlineKeyboardButton("🐶 Собака: 🥣 Ужин", callback_data="fd:собака:вечер"),
-        ],
-        [
-            InlineKeyboardButton("🐱 Кот: 🥣 Завтрак", callback_data="fd:кот:утро"),
-            InlineKeyboardButton("🐱 Кот: 🥣 Ужин", callback_data="fd:кот:вечер"),
-        ],
-    ])
-
-
-async def feed_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Интерактивное меню кормления или быстрая отметка."""
-    state = load_state()
-    if context.args:
-        pet_arg = context.args[0].lower()
-        pet = "🐶 Собака" if "соб" in pet_arg or "dog" in pet_arg else "🐱 Кот"
-        slot = "☀️ Утро" if datetime.now(TZ).hour < 15 else "🌙 Вечер"
-        who = user_name(update.effective_user)
-        today_str = today_local().isoformat()
-        state["feeds"].append({
-            "pet": pet, "slot": slot, "who": who,
-            "at": datetime.now(TZ).isoformat(timespec="minutes"), "date": today_str,
-        })
-        save_state(state)
-        await update_pinned(context.bot, state)
-        await update.message.reply_text(f"🥣 {who} покормил(а): {pet} ({slot}) ✅")
-        return
-
-    text = "🥣 *Кто и кого покормил?*\n\n" + get_pets_status(state)
-    await update.message.reply_text(text, reply_markup=build_feed_keyboard(), parse_mode="Markdown")
-
-
-async def feeds_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    state = load_state()
-    await update.message.reply_text(f"🥣 *Статус кормления и прогулок на сегодня:*\n\n{get_pets_status(state)}", parse_mode="Markdown")
-
-
-async def on_feed_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    _, pet_key, slot_key = query.data.split(":")
-    state = load_state()
-    who = user_name(query.from_user)
-    today_str = today_local().isoformat()
-
-    pet = "🐶 Собака" if pet_key == "собака" else "🐱 Кот"
-    slot = "☀️ Утро" if slot_key == "утро" else "🌙 Вечер"
-
-    state["feeds"].append({
-        "pet": pet, "slot": slot, "who": who,
-        "at": datetime.now(TZ).isoformat(timespec="minutes"), "date": today_str,
-    })
-    del state["feeds"][:-500]
-    save_state(state)
-    await update_pinned(context.bot, state)
-    await query.answer(f"Записано: {pet} накормлен(а) ({who})!")
-    try:
-        await query.edit_message_text(
-            f"🥣 *Кормление обновлено!*\n\n{get_pets_status(state)}",
-            reply_markup=build_feed_keyboard(),
-            parse_mode="Markdown",
-        )
-    except Exception:
-        pass
 
 
 # ---------- покупки (интерактивный UX) ----------
@@ -1278,7 +1168,6 @@ def score_lines(entries: list) -> list:
 def weekly_text(state: dict) -> str:
     since = (today_local() - timedelta(days=6)).isoformat()
     top = score_lines([e for e in state["log"] if e["date"] >= since])
-    walks_n = sum(1 for w in state["walks"] if w["at"][:10] >= since)
     if not top:
         return "📊 *Итоги недели:* пока ничего не отмечено."
     lines = ["📊 *Итоги недели (баллы за сложность):*"]
@@ -1288,8 +1177,6 @@ def weekly_text(state: dict) -> str:
         lines.append("🏆 Ничья на первом месте!")
     else:
         lines.append(f"🏆 Герой недели: {top[0][0]}")
-    if walks_n:
-        lines.append(f"🐕 Прогулок за неделю: {walks_n}")
     return "\n".join(lines)
 
 
@@ -1613,21 +1500,43 @@ async def track(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_state(state)
 
 
-async def on_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка нажатий на кнопки нижней клавиатуры."""
-    text = (update.message.text or "").strip()
-    if text == "📅 Сегодня":
-        await today_cmd(update, context)
-    elif text == "🛒 Покупки":
-        await shopping(update, context)
-    elif text == "🐕 Прогулка":
-        await walk(update, context)
-    elif text == "🥣 Покормили":
-        await feed_cmd(update, context)
-    elif text == "💸 Баланс":
+# ---------- обработчики кнопок меню (Inline + Reply) ----------
+async def on_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка кнопок из /menu (работает 100% стабильно в группах)."""
+    q = update.callback_query
+    await q.answer()
+    act = q.data.split(":")[1]
+    state = load_state()
+
+    if act == "today":
+        text, kb, _ = build_today(state)
+        await q.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+    elif act == "shop":
+        text, kb = build_shopping_view(state)
+        await q.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+    elif act == "balance":
         await balance(update, context)
-    elif text == "➕ Быстрое дело":
-        await update.message.reply_text("Отправьте дело: `/todo Забрать посылку`", parse_mode="Markdown")
+    elif act == "list":
+        await list_tasks(update, context)
+    elif act == "top":
+        await top(update, context)
+
+
+async def on_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка нажатий на нижние кнопки."""
+    text = (update.message.text or "").strip()
+    if "сегодня" in text.lower():
+        await today_cmd(update, context)
+    elif "покупки" in text.lower():
+        await shopping(update, context)
+    elif "баланс" in text.lower():
+        await balance(update, context)
+    elif "быстрое дело" in text.lower():
+        await update.message.reply_text("Отправьте дело на сегодня: `/todo Забрать посылку`", parse_mode="Markdown")
+    elif "все задания" in text.lower():
+        await list_tasks(update, context)
+    elif "рейтинг" in text.lower():
+        await top(update, context)
 
 
 async def post_init(app: Application):
@@ -1657,8 +1566,6 @@ def main():
         ("today", today_cmd), ("del", delete), ("undo", undo_cmd),
         ("preset", preset), ("vacation", vacation_cmd),
         ("pin", pin_cmd), ("unpin", unpin_cmd), ("edit", edit_cmd),
-        ("walk", walk), ("walks", walks),
-        ("feed", feed_cmd), ("feeds", feeds_cmd),
         ("buy", buy), ("shopping", shopping), ("bought", bought),
         ("join", join), ("spent", spent), ("balance", balance),
         ("currency", currency_cmd), ("history", history_cmd),
@@ -1670,14 +1577,14 @@ def main():
     app.add_handler(CallbackQueryHandler(on_today_button, pattern=r"^tdone:"))
     app.add_handler(CallbackQueryHandler(on_undo_button, pattern=r"^tundo$"))
     app.add_handler(CallbackQueryHandler(on_skip, pattern=r"^skip:"))
-    app.add_handler(CallbackQueryHandler(on_feed_button, pattern=r"^fd:"))
     app.add_handler(CallbackQueryHandler(on_shopping_button, pattern=r"^shop:"))
+    app.add_handler(CallbackQueryHandler(on_menu_inline, pattern=r"^menu:"))
     app.add_handler(CallbackQueryHandler(on_edit, pattern=r"^ed:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.REPLY, on_reply))
 
-    # Обработчик кнопок нижней клавиатуры
+    # Обработчик кнопок нижней клавиатуры (с мягким поиском текста)
     app.add_handler(MessageHandler(
-        filters.TEXT & filters.Regex(r"^(📅 Сегодня|🛒 Покупки|🐕 Прогулка|🥣 Покормили|💸 Баланс|➕ Быстрое дело)$"),
+        filters.TEXT & ~filters.COMMAND & filters.Regex(r"(?i)(сегодня|покупки|баланс|быстрое дело|все задания|рейтинг)"),
         on_menu_text,
     ))
 
