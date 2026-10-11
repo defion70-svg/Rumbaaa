@@ -56,11 +56,11 @@ except Exception:
     except Exception:
         TZ = timezone(timedelta(hours=2))
 
-REMIND_AT = time(10, 0)     # утренняя сводка
-EVENING_AT = time(21, 0)    # вечернее напоминание о несделанных делах
-WEEKLY_AT = time(20, 0)     # итоги недели (по воскресеньям)
+REMIND_AT = time(11, 0)     # утренняя сводка
+EVENING_AT = time(23, 0)    # вечернее напоминание о несделанных делах
+WEEKLY_AT = time(23, 0)     # итоги недели (по воскресеньям)
 REPEAT_DAYS = 2             # сколько дней после срока задание остаётся «висеть»
-MORNING_MESSAGE_WHEN_PINNED = False  # True: слать отдельное утреннее сообщение даже при закреплённом чек-листе
+MORNING_MESSAGE_WHEN_PINNED = True  # True: слать отдельное утреннее сообщение даже при закреплённом чек-листе
 # --------------------------------
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "."))
