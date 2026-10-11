@@ -88,29 +88,30 @@ PRAISE = [
     "Ещё одно дело в копилку!", "Вот это порядок!", "Герой дня! 🏆", "Домашний уют +100! 🏡",
 ]
 
-# Нижняя клавиатура для быстрого доступа
+# Обновленная нижняя клавиатура по запросу пользователя:
+# Сегодня, добавить быстрое дело, добавить дело, все задания, редактировать, рейтинг
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
-        [KeyboardButton("📅 Сегодня"), KeyboardButton("🛒 Покупки")],
-        [KeyboardButton("💸 Баланс"), KeyboardButton("➕ Быстрое дело")],
-        [KeyboardButton("📋 Все задания"), KeyboardButton("🏆 Рейтинг")],
+        [KeyboardButton("📅 Сегодня"), KeyboardButton("⚡ Добавить быстрое дело")],
+        [KeyboardButton("➕ Добавить дело"), KeyboardButton("📋 Все задания")],
+        [KeyboardButton("✏️ Редактировать"), KeyboardButton("🏆 Рейтинг")],
     ],
     resize_keyboard=True,
 )
 
-# Инлайн-панель (работает в любых группах без отключения Privacy Mode)
+# Инлайн-панель по /menu
 INLINE_MENU = InlineKeyboardMarkup([
     [
-        InlineKeyboardButton("📅 Дела на сегодня", callback_data="menu:today"),
-        InlineKeyboardButton("🛒 Список покупок", callback_data="menu:shop"),
+        InlineKeyboardButton("📅 Сегодня", callback_data="menu:today"),
+        InlineKeyboardButton("⚡ Быстрое дело", callback_data="menu:todo"),
     ],
     [
-        InlineKeyboardButton("💸 Баланс и долги", callback_data="menu:balance"),
+        InlineKeyboardButton("➕ Добавить дело", callback_data="menu:add"),
         InlineKeyboardButton("📋 Все задания", callback_data="menu:list"),
     ],
     [
-        InlineKeyboardButton("🏆 Рейтинг недели", callback_data="menu:top"),
-        InlineKeyboardButton("✏️ Редактор заданий", callback_data="ed:list"),
+        InlineKeyboardButton("✏️ Редактировать", callback_data="ed:list"),
+        InlineKeyboardButton("🏆 Рейтинг", callback_data="menu:top"),
     ],
 ])
 
@@ -118,7 +119,7 @@ HELP = (
     "🏡 *ДОМАШНИЙ ПОМОЩНИК*\n\n"
     "📋 *ЗАДАНИЯ:*\n"
     "• `/today` — дела на сегодня (интерактивный чек-лист)\n"
-    "• `/todo [дело]` — быстрое разовое дело на сегодня (напр: `/todo Забрать посылку`)\n"
+    "• `/todo [дело]` — быстрое разовое дело на сегодня\n"
     "• `/add Название | кто | срок | сложность` — добавить регулярное задание\n"
     "• `/list` — все регулярные задания\n"
     "• `/del N` — удалить задание\n"
@@ -142,21 +143,21 @@ HELP = (
     "• `/currency rsd|eur|rub` — валюта по умолчанию\n\n"
     "🏆 *РЕЙТИНГ И ИНТЕРФЕЙС:*\n"
     "• `/top` — рейтинг по баллам за сложность дел\n"
-    "• `/menu` — интерактивная кнопочная панель управления"
+    "• `/menu` — кнопочная панель управления"
 )
 
 COMMANDS = [
     ("today", "Дела на сегодня"),
     ("todo", "Быстрое дело на сегодня"),
+    ("add", "Добавить регулярное задание"),
+    ("list", "Все задания"),
+    ("edit", "Редактировать задания"),
+    ("menu", "Кнопочная панель управления"),
     ("shopping", "Список покупок"),
     ("balance", "Кто кому должен (расходы)"),
     ("spent", "Записать совместный расход"),
-    ("menu", "Кнопочная панель управления"),
     ("undo", "Отменить последнее выполнение"),
     ("vacation", "Режим отпуска (пропуск очереди)"),
-    ("edit", "Редактировать задания"),
-    ("list", "Все задания"),
-    ("add", "Добавить регулярное задание"),
     ("del", "Удалить задание"),
     ("pin", "Закрепить чек-лист"),
     ("top", "Рейтинг и итоги недели"),
@@ -592,6 +593,38 @@ def build_today(state: dict):
     return "\n".join(lines), (InlineKeyboardMarkup(buttons) if buttons else None), count
 
 
+# ---------- диалоги добавления дел ----------
+async def prompt_quick_todo(target_message, context: ContextTypes.DEFAULT_TYPE):
+    """Запрашивает текст быстрого дела без ввода команд."""
+    context.user_data["awaiting"] = "quick_todo"
+    await target_message.reply_text(
+        "⚡ *Напишите быстрое дело на сегодня:*\n"
+        "Например: `Забрать посылку` или `Помыть обувь | Алина`",
+        reply_markup=ForceReply(selective=True, input_field_placeholder="Дело на сегодня..."),
+        parse_mode="Markdown",
+    )
+
+
+async def prompt_full_task(target_message, context: ContextTypes.DEFAULT_TYPE):
+    """Запрашивает параметры регулярного задания без ввода команд."""
+    context.user_data["awaiting"] = "full_task"
+    await target_message.reply_text(
+        "➕ *Добавление регулярного задания*\n\n"
+        "Напишите параметры через « | »:\n"
+        "`Название | кто | срок | сложность`\n\n"
+        "📌 *Примеры срока:*\n"
+        "• `каждую среду`\n"
+        "• `каждые 14 дней`\n"
+        "• `1 числа`\n"
+        "• `раз в 3 месяца 1 числа`\n"
+        "• `раз в год 15.03`\n\n"
+        "💡 *Пример сообщения целиком:*\n"
+        "`🍳 Мытьё плиты | Сосед / Мы с женой | каждую субботу | средняя`",
+        reply_markup=ForceReply(selective=True, input_field_placeholder="Название | кто | срок | сложность"),
+        parse_mode="Markdown",
+    )
+
+
 # ---------- команды: задания ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = load_state()
@@ -611,7 +644,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает интерактивную панель меню (Inline-кнопки работают в любых чатах)."""
+    """Показывает интерактивную панель меню."""
     await update.message.reply_text(
         "📱 *Панель управления бытом:*\nВыберите нужное действие:",
         reply_markup=INLINE_MENU,
@@ -641,7 +674,7 @@ def add_task(state: dict, task: dict) -> str:
 async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     parts_raw = update.message.text.split(None, 1)
     if len(parts_raw) < 2:
-        await update.message.reply_text(HELP, parse_mode="Markdown")
+        await prompt_full_task(update.message, context)
         return
     try:
         task = build_task([p.strip() for p in parts_raw[1].split("|")])
@@ -665,12 +698,7 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def todo_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Быстрое разовое дело на сегодня."""
     if not context.args:
-        await update.message.reply_text(
-            "Напишите дело на сегодня:\n"
-            "Пример: `/todo Забрать посылку`\n"
-            "Или с указанием исполнителя: `/todo Помыть обувь | Алина`",
-            parse_mode="Markdown",
-        )
+        await prompt_quick_todo(update.message, context)
         return
     raw = " ".join(context.args)
     if "|" in raw:
@@ -699,7 +727,7 @@ async def todo_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = load_state()
     if not state["tasks"]:
-        await update.message.reply_text("Заданий пока нет. Добавьте через /add или /todo")
+        await update.message.reply_text("Заданий пока нет. Добавьте через кнопки ниже или /add")
         return
     today = today_local()
     lines = ["📋 *Задания:*"]
@@ -1460,11 +1488,10 @@ async def on_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if act == "today":
         text, kb, _ = build_today(state)
         await q.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
-    elif act == "shop":
-        text, kb = build_shopping_view(state)
-        await q.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
-    elif act == "balance":
-        await balance(update, context)
+    elif act == "todo":
+        await prompt_quick_todo(q.message, context)
+    elif act == "add":
+        await prompt_full_task(q.message, context)
     elif act == "list":
         await list_tasks(update, context)
     elif act == "top":
@@ -1472,14 +1499,54 @@ async def on_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def on_general_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Единый обработчик текстовых сообщений: ответы редактора и нажатия на кнопки."""
+    """Единый обработчик текстовых сообщений: ответы, кнопки и добавление без команд."""
     msg = update.message
     if not msg or not msg.text:
         return
     text = msg.text.strip()
     text_lower = text.lower()
 
-    # 1. Проверяем, не ответ ли это на вопрос в панели /edit
+    # 1. Сначала проверяем нажатия на кнопки меню (они отменяют любой режим ожидания)
+    if "сегодня" in text_lower:
+        context.user_data.pop("awaiting", None)
+        context.user_data.pop("edit", None)
+        await today_cmd(update, context)
+        return
+    elif "быстрое дело" in text_lower:
+        context.user_data.pop("edit", None)
+        await prompt_quick_todo(msg, context)
+        return
+    elif "добавить дело" in text_lower or text_lower == "добавить":
+        context.user_data.pop("edit", None)
+        await prompt_full_task(msg, context)
+        return
+    elif "все задания" in text_lower or "список заданий" in text_lower:
+        context.user_data.pop("awaiting", None)
+        context.user_data.pop("edit", None)
+        await list_tasks(update, context)
+        return
+    elif "редактировать" in text_lower or "редактор" in text_lower:
+        context.user_data.pop("awaiting", None)
+        context.user_data.pop("edit", None)
+        await edit_cmd(update, context)
+        return
+    elif "рейтинг" in text_lower or "топ" in text_lower:
+        context.user_data.pop("awaiting", None)
+        context.user_data.pop("edit", None)
+        await top(update, context)
+        return
+    elif "покупки" in text_lower:
+        context.user_data.pop("awaiting", None)
+        context.user_data.pop("edit", None)
+        await shopping(update, context)
+        return
+    elif "баланс" in text_lower:
+        context.user_data.pop("awaiting", None)
+        context.user_data.pop("edit", None)
+        await balance(update, context)
+        return
+
+    # 2. Проверяем, не ответ ли это на вопрос в панели /edit
     pend = context.user_data.get("edit")
     if pend and msg.reply_to_message and msg.reply_to_message.message_id == pend.get("prompt_id"):
         state = load_state()
@@ -1527,19 +1594,59 @@ async def on_general_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(pend["chat_id"], panel_text, reply_markup=kb)
         return
 
-    # 2. Обработка кнопок быстрого меню
-    if "сегодня" in text_lower:
-        await today_cmd(update, context)
-    elif "покупки" in text_lower:
-        await shopping(update, context)
-    elif "баланс" in text_lower:
-        await balance(update, context)
-    elif "быстрое дело" in text_lower:
-        await update.message.reply_text("Отправьте дело на сегодня: `/todo Забрать посылку`", parse_mode="Markdown")
-    elif "все задания" in text_lower or "список заданий" in text_lower:
-        await list_tasks(update, context)
-    elif "рейтинг" in text_lower or "топ" in text_lower:
-        await top(update, context)
+    # 3. Режим прямого ввода быстрого дела (без команды /todo)
+    awaiting = context.user_data.get("awaiting")
+    if awaiting == "quick_todo":
+        context.user_data.pop("awaiting", None)
+        if "|" in text:
+            parts = [p.strip() for p in text.split("|", 1)]
+            title, who = parts[0], parts[1]
+        else:
+            title = text
+            who = user_name(update.effective_user)
+
+        state = load_state()
+        today = today_local()
+        task = {
+            "title": f"📌 {title}",
+            "owners": [who],
+            "idx": 0,
+            "schedule": {"type": "once", "date": today.isoformat()},
+            "done_for": None,
+            "level": 1,
+        }
+        add_task(state, task)
+        save_state(state)
+        await update_pinned(context.bot, state)
+        await msg.reply_text(f"✅ Добавлено быстрое дело на сегодня:\n*{title}* — {who}", parse_mode="Markdown")
+        return
+
+    # 4. Режим прямого ввода регулярного задания (без команды /add)
+    if awaiting == "full_task":
+        try:
+            task = build_task([p.strip() for p in text.split("|")])
+        except ValueError as e:
+            await msg.reply_text(
+                f"{e}\n\nПопробуйте ещё раз (или нажмите кнопку в меню для отмены).\n"
+                "Формат: `Название | кто | срок | сложность`",
+                parse_mode="Markdown",
+            )
+            return
+        context.user_data.pop("awaiting", None)
+        state = load_state()
+        add_task(state, task)
+        save_state(state)
+        await update_pinned(context.bot, state)
+        emoji, name = LEVELS[task["level"]]
+        await msg.reply_text(
+            f"✅ Добавлено регулярное задание №{len(state['tasks'])}:\n"
+            f"*{task['title']}*\n"
+            f"Кто: {' → '.join(task['owners'])}\n"
+            f"Срок: {describe(task['schedule'])}\n"
+            f"Сложность: {emoji} {name}",
+            parse_mode="Markdown",
+        )
+        return
 
 
 async def post_init(app: Application):
@@ -1592,4 +1699,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+EOF
 
