@@ -10,7 +10,7 @@
 
 Запуск:
   pip install python-telegram-bot
-  export BOT_TOKEN="токен от @BotFather"
+  export BOT_TOKEN="7981476404:AAFbkyw1kdyAKs57p7aNctYVQ5zuxLeYqNI"
   export BOT_TZ="Europe/Belgrade"  # или Europe/Moscow
   python chores_bot.py
 """
