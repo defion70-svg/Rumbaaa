@@ -59,9 +59,9 @@ except Exception:
         TZ = timezone(timedelta(hours=2))
 
 BOT_START_DATE = date(2026, 10, 10)  # Дата начала работы (10.10): сроки до этой даты не считаются просроченными
-REMIND_AT = time(10, 0)     # утренняя сводка
-EVENING_AT = time(21, 0)    # вечернее напоминание о несделанных делах
-WEEKLY_AT = time(20, 0)     # итоги недели (по воскресеньям)
+REMIND_AT = time(8, 0)     # утренняя сводка
+EVENING_AT = time(23, 0)    # вечернее напоминание о несделанных делах
+WEEKLY_AT = time(23, 0)     # итоги недели (по воскресеньям)
 MORNING_MESSAGE_WHEN_PINNED = True  # True: слать отдельное утреннее сообщение даже при закреплённом чек-листе
 SILENT_MESSAGES = True              # True: отправлять ВСЕ сообщения бота без звука и вибрации
 ALICE_HOST = os.environ.get("ALICE_HOST", "0.0.0.0")
@@ -645,7 +645,7 @@ def build_today(state: dict):
     else:
         for tid, t, due, late in pending:
             suffix = "" if late == 0 else f" ⏰ не сделано ({late} дн.)"
-            lines.append(f"🟨 {t['title']} — {current_owner(t, state)}{suffix}")
+            lines.append(f" {t['title']} — {current_owner(t, state)}{suffix}")
             occ_str = due.isoformat()
             if len(t.get("owners", [])) > 1:
                 buttons.append([
